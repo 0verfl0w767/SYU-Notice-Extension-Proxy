@@ -8,19 +8,34 @@ const app = express();
 app.use(cors());
 app.set("trust proxy", true);
 
-app.use((req, res, next) => {
-  const now = new Date().toISOString();
+function formatDate(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+    date.getSeconds(),
+  )}`;
+}
 
-  const userIP = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+function nowStr() {
+  return formatDate(new Date());
+}
+
+app.use(async (req, res, next) => {
+  const now = nowStr();
+  const forwarded = req.headers["x-forwarded-for"];
+  const userIP = forwarded
+    ? forwarded.split(",")[0].trim()
+    : req.ip || (req.socket && req.socket.remoteAddress) || "unknown";
 
   const logLine = `[${now}] ${req.method} ${req.originalUrl} - From: ${userIP}`;
   console.log(logLine);
   const logFile = path.join(__dirname, "server.log");
-  fs.appendFile(logFile, `${logLine}\n`, (err) => {
-    if (err) {
-      console.error(`Failed to write log: ${err.message}`);
-    }
-  });
+  try {
+    await fs.promises.appendFile(logFile, `${logLine}\n`);
+  } catch (err) {
+    console.error(`[${now}] Failed to write log: ${err.message}`);
+  }
   next();
 });
 
@@ -36,12 +51,14 @@ const CACHE_TTL_SEC = 60 * 60;
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const redisClient = createClient({ url: REDIS_URL });
 redisClient.on("error", (err) => {
-  console.error(`Redis error: ${err.message}`);
+  console.error(`[${nowStr()}] Redis error: ${err.message}`);
 });
 redisClient
   .connect()
-  .then(() => console.log(`Redis connected: ${REDIS_URL}`))
-  .catch((err) => console.error(`Redis connect failed: ${err.message}`));
+  .then(() => console.log(`[${nowStr()}] Redis connected: ${REDIS_URL}`))
+  .catch((err) =>
+    console.error(`[${nowStr()}] Redis connect failed: ${err.message}`),
+  );
 
 app.get("/notices/:type", async (req, res) => {
   try {
@@ -50,7 +67,7 @@ app.get("/notices/:type", async (req, res) => {
 
     if (!url) {
       console.log(
-        `Invalid notice type requested: ${noticeType} from ${req.ip}`,
+        `[${nowStr()}] Invalid notice type requested: ${noticeType} from ${req.ip}`,
       );
       return res.status(400).json({ ok: false, error: "Invalid notice type" });
     }
@@ -63,7 +80,7 @@ app.get("/notices/:type", async (req, res) => {
       }
     }
 
-    console.log(`Fetching URL: ${url} for user ${req.ip}`);
+    console.log(`[${nowStr()}] Fetching URL: ${url} for user ${req.ip}`);
 
     const response = await fetch(url, {
       headers: {
@@ -73,7 +90,9 @@ app.get("/notices/:type", async (req, res) => {
 
     const html = await response.text();
 
-    console.log(`Fetched ${html.length} characters from ${url} for ${req.ip}`);
+    console.log(
+      `[${nowStr()}] Fetched ${html.length} characters from ${url} for ${req.ip}`,
+    );
 
     if (redisClient.isReady) {
       const cacheKey = `notice:${noticeType}`;
@@ -82,11 +101,13 @@ app.get("/notices/:type", async (req, res) => {
 
     res.json({ ok: true, html, cached: false });
   } catch (err) {
-    console.error(`Error fetching notice for ${req.ip}: ${err.message}`);
+    console.error(
+      `[${nowStr()}] Error fetching notice for ${req.ip}: ${err.message}`,
+    );
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 app.listen(9090, () => {
-  console.log("Proxy running on http://localhost:9090");
+  console.log(`[${nowStr()}] Proxy running on http://localhost:9090`);
 });
