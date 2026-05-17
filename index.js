@@ -29,6 +29,7 @@ const NOTICE_URLS = {
   event: "https://www.syu.ac.kr/university-square/notice/event/",
   scholarship:
     "https://www.syu.ac.kr/academic/scholarship-information/scholarship-notice/",
+  software: "https://www.syu.ac.kr/swuniv/community/notice/",
 };
 
 const CACHE_TTL_SEC = 60 * 60;
