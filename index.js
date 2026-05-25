@@ -9,11 +9,25 @@ app.use(cors());
 app.set("trust proxy", true);
 
 app.use((req, res, next) => {
-  const now = new Date().toISOString();
+  const now = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
 
-  const userIP = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const userIP =
+    (typeof forwardedFor === "string"
+      ? forwardedFor.split(",")[0].trim()
+      : req.connection.remoteAddress) || "unknown";
+  const userAgent = req.get("user-agent") || "unknown";
 
-  const logLine = `[${now}] ${req.method} ${req.originalUrl} - From: ${userIP}`;
+  const logLine = `[${now}] ${req.method} ${req.originalUrl} - From: ${userIP} - UA: ${userAgent}`;
   console.log(logLine);
   const logFile = path.join(__dirname, "server.log");
   fs.appendFile(logFile, `${logLine}\n`, (err) => {
